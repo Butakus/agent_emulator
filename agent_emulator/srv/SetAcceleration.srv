@@ -1,0 +1,9 @@
+# Request
+
+# Target acceleration
+geometry_msgs/AccelStamped acceleration
+
+---
+# Response
+
+bool success
