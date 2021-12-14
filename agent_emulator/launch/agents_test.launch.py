@@ -7,6 +7,7 @@ import sys
 import math
 
 from launch import LaunchDescription, LaunchIntrospector, LaunchService
+from launch.actions import TimerAction, ExecuteProcess
 
 from launch_ros.actions import Node, ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
@@ -28,8 +29,7 @@ def generate_launch_description():
 
     # Load agent nodes
     for i, pose in enumerate(initial_poses):
-        agent_name = "agent_{}".format(i)
-        print(agent_name)
+        agent_name = "agent_{:02d}".format(i)
         agent_nodes = []
         #########################################################################
         # Agent emulator
@@ -53,7 +53,6 @@ def generate_launch_description():
         # Noisy Localization
         #########################################################################
         # Parameters
-        agent_name = "agent_{}".format(i)
         noisy_localization_params = [{
             "position_stddev": 2.0,
             "orientation_stddev": deg_to_rad(0.5),
@@ -68,6 +67,10 @@ def generate_launch_description():
         )
         agent_nodes.append(noisy_localization_node)
 
+        #########################################################################
+        # Velocity controller
+        #########################################################################
+        # Parameters
         triangular_velocity_controller_params = [{
             'acceleration': 1.0,
             'period': 5.0,
@@ -79,7 +82,20 @@ def generate_launch_description():
             name='triangular_velocity_controller', namespace='/' + agent_name,
             parameters=triangular_velocity_controller_params
         )
-        agent_nodes.append(velocity_controller_node)
+        # agent_nodes.append(velocity_controller_node)
+
+        #########################################################################
+        # Constant velocity trigger
+        #########################################################################
+        velocity_cmd = ['ros2', 'topic', 'pub', '-1',
+            '/{}/target_velocity'.format(agent_name),
+            'geometry_msgs/msg/TwistStamped',
+            "{'twist': {'linear': {'x': 4.0 }, 'angular': {'z': 0.5} } }",
+        ]
+        ld.add_action(TimerAction(period=5.0, actions=[
+            ExecuteProcess(cmd=velocity_cmd, name='{}_velocity_pub'.format(agent_name))
+        ]))
+
         #########################################################################
         # Node container
         #########################################################################
@@ -95,10 +111,7 @@ def generate_launch_description():
 
     # Load agent_visualization node
     agent_viz_params = [{
-        "pose_topics": [
-            "/agent_0/pose",
-            "/agent_1/pose"
-        ]
+        "pose_topics": ["/agent_{:02d}/pose".format(i) for i in range(len(initial_poses))],
     }]
     agent_viz_node = Node(
                     package='agent_emulator', executable='agent_viz', name='agent_viz',
