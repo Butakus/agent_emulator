@@ -44,7 +44,7 @@ void NoisyLocalization::init()
     this->velocity_angular_gauss_distribution_ = std::normal_distribution<>(0.0, this->velocity_angular_stddev_);
 
     // Publisher / Subscribers
-    this->odom_pub_ = this->create_publisher<Odometry>("noisy_odom", rclcpp::SensorDataQoS());
+    this->odom_pub_ = this->create_publisher<Odometry>("prior_pose_estimation", rclcpp::SensorDataQoS());
     using std::placeholders::_1;
     this->pose_sub_ = this->create_subscription<Pose>(
         "pose", rclcpp::SensorDataQoS(),
