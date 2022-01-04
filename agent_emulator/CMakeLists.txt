@@ -24,6 +24,7 @@ find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
@@ -80,10 +81,30 @@ rclcpp_components_register_node(agent_viz_node
   EXECUTABLE agent_viz
 )
 
+# Add CarlaAgentViz target library
+add_library(carla_agent_viz_node SHARED
+  src/agent_emulator/carla_agent_viz.cpp
+)
+target_include_directories(carla_agent_viz_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+ament_target_dependencies(carla_agent_viz_node
+  rclcpp
+  rclcpp_components
+  geometry_msgs
+  nav_msgs
+  visualization_msgs
+)
+rclcpp_components_register_node(carla_agent_viz_node
+  PLUGIN "agent_emulator::CarlaAgentViz"
+  EXECUTABLE carla_agent_viz
+)
+
 # Install node libraries
 install(TARGETS
   agent_node
   agent_viz_node
+  carla_agent_viz_node
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -94,6 +115,7 @@ install(TARGETS
 install(TARGETS
   agent
   agent_viz
+  carla_agent_viz
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -129,6 +151,7 @@ endif()
 ament_export_libraries(
   agent_node
   agent_viz_node
+  carla_agent_viz_node
 )
 
 ament_export_dependencies(
@@ -140,6 +163,7 @@ ament_export_dependencies(
   tf2
   tf2_ros
   geometry_msgs
+  nav_msgs
   visualization_msgs
 )
 
