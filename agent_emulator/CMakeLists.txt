@@ -51,6 +51,7 @@ target_include_directories(agent_node PUBLIC
 ament_target_dependencies(agent_node
   rclcpp
   geometry_msgs
+  nav_msgs
   tf2
   tf2_ros
   rclcpp_action

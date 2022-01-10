@@ -24,7 +24,7 @@ def generate_launch_description():
     # Initial poses
     initial_poses = [
         [4.0, 0.0, 0],
-        [-4.0, 0.0, 0]
+        # [-4.0, 0.0, 0]
     ]
 
     # Load agent nodes
@@ -65,7 +65,7 @@ def generate_launch_description():
             name='noisy_localization', namespace="/" + agent_name,
             parameters=noisy_localization_params
         )
-        agent_nodes.append(noisy_localization_node)
+        # agent_nodes.append(noisy_localization_node)
 
         #########################################################################
         # Velocity controller
@@ -117,7 +117,7 @@ def generate_launch_description():
                     package='agent_emulator', executable='agent_viz', name='agent_viz',
                     output='screen', parameters=agent_viz_params
                    )
-    ld.add_action(agent_viz_node)
+    # ld.add_action(agent_viz_node)
 
     rviz_config_file = os.path.join(get_package_share_directory('agent_emulator'), 'launch/agents.rviz')
     rviz_node = Node(

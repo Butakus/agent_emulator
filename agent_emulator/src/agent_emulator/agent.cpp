@@ -67,6 +67,15 @@ void Agent::init()
     this->acceleration_.header.frame_id = this->frame_id_;
     this->acceleration_.header.stamp = init_time;
 
+    // Init odometry
+    std::string ns = this->get_effective_namespace();
+    // Use namespace in odom tf frame, removing the starting '/'
+    ns = (ns.size() > 1) ? ns.substr(1, ns.size() - 1) : "";
+    this->odom_.header.frame_id = ns + "odom";
+    this->odom_.child_frame_id = this->frame_id_;
+    this->odom_.header.stamp = init_time;
+    this->reset_odom();
+
     // Set callback to handle parameter setting
     this->set_param_callback_handler_ = this->add_on_set_parameters_callback(
                                                 std::bind(&Agent::set_param_callback, this, _1));
@@ -75,6 +84,7 @@ void Agent::init()
     this->pose_pub_ = this->create_publisher<Pose>("pose", 5);
     this->velocity_pub_ = this->create_publisher<Twist>("velocity", 5);
     this->acceleration_pub_ = this->create_publisher<Accel>("acceleration", 5);
+    this->odometry_pub_ = this->create_publisher<Odometry>("odom", 5);
 
     // Subscribers
     this->velocity_sub_ = this->create_subscription<Twist>(
@@ -161,6 +171,8 @@ void Agent::set_pose(const Pose& pose)
     // Update state
     this->pose_.header = pose.header;
     this->pose_.pose = pose.pose;
+    // Reset odometry
+    this->reset_odom();
     // Update time
     this->last_update_time_ = this->now();
 }
@@ -171,6 +183,8 @@ void Agent::set_x(const double x)
     std::lock_guard<std::recursive_mutex> lock(this->state_mutex_);
     // Update state
     this->pose_.pose.position.x = x;
+    // Reset odometry
+    this->reset_odom();
     // Update time
     this->last_update_time_ = this->now();
 }
@@ -181,6 +195,8 @@ void Agent::set_y(const double y)
     std::lock_guard<std::recursive_mutex> lock(this->state_mutex_);
     // Update state
     this->pose_.pose.position.y = y;
+    // Reset odometry
+    this->reset_odom();
     // Update time
     this->last_update_time_ = this->now();
 }
@@ -191,8 +207,27 @@ void Agent::set_yaw(const double yaw)
     std::lock_guard<std::recursive_mutex> lock(this->state_mutex_);
     // Update state
     this->pose_.pose.orientation = quaternion_msg_from_yaw(yaw);
+    // Reset odometry
+    this->reset_odom();
     // Update time
     this->last_update_time_ = this->now();
+}
+
+void Agent::reset_odom()
+{
+    this->odom_.pose.pose.position.x = 0.0;
+    this->odom_.pose.pose.position.y = 0.0;
+    this->odom_.pose.pose.position.z = 0.0;
+    this->odom_.pose.pose.orientation = quaternion_msg_from_yaw(0.0);
+    this->odom_.pose.covariance = std::array<double, 36> {0};
+
+    this->odom_.twist.twist.linear.x = 0.0;
+    this->odom_.twist.twist.linear.y = 0.0;
+    this->odom_.twist.twist.linear.z = 0.0;
+    this->odom_.twist.twist.angular.x = 0.0;
+    this->odom_.twist.twist.angular.y = 0.0;
+    this->odom_.twist.twist.angular.z = 0.0;
+    this->odom_.twist.covariance = std::array<double, 36> {0};
 }
 
 void Agent::set_velocity(const Twist& velocity)
@@ -262,9 +297,8 @@ void Agent::set_frame_id(const std::string frame_id)
     this->frame_id_ = frame_id;
     this->velocity_.header.frame_id = frame_id;
     this->acceleration_.header.frame_id = frame_id;
+    this->odom_.child_frame_id = frame_id;
 }
-
-
 
 void Agent::velocity_callback(const Twist::SharedPtr twist_msg)
 {
@@ -474,14 +508,30 @@ void Agent::update_pose(const rclcpp::Duration& dt_dur)
 {
     // Convert Duration to seconds
     double dt = dt_dur.seconds();
-
+    // Update position
     double old_yaw = yaw_from_quaternion<double>(this->pose_.pose.orientation);
     this->pose_.pose.position.x += dt * this->velocity_.twist.linear.x * std::cos(old_yaw);
     this->pose_.pose.position.y += dt * this->velocity_.twist.linear.x * std::sin(old_yaw);
     this->pose_.pose.position.z += dt * this->velocity_.twist.linear.z;
-
+    // Update orientation
     double new_yaw = old_yaw + dt * this->velocity_.twist.angular.z;
     this->pose_.pose.orientation = quaternion_msg_from_yaw(new_yaw);
+}
+
+void Agent::update_odom(const rclcpp::Duration& dt_dur)
+{
+    // Convert Duration to seconds
+    double dt = dt_dur.seconds();
+    // Update position
+    double old_yaw = yaw_from_quaternion<double>(this->odom_.pose.pose.orientation);
+    this->odom_.pose.pose.position.x += dt * this->velocity_.twist.linear.x * std::cos(old_yaw);
+    this->odom_.pose.pose.position.y += dt * this->velocity_.twist.linear.x * std::sin(old_yaw);
+    this->odom_.pose.pose.position.z += dt * this->velocity_.twist.linear.z;
+    // Update orientation
+    double new_yaw = old_yaw + dt * this->velocity_.twist.angular.z;
+    this->odom_.pose.pose.orientation = quaternion_msg_from_yaw(new_yaw);
+    // Update velocity
+    this->odom_.twist.twist = this->velocity_.twist;
 }
 
 void Agent::update_state()
@@ -495,10 +545,13 @@ void Agent::update_state()
     this->update_velocity(dt);
     // Update pose
     this->update_pose(dt);
+    // Update odom
+    this->update_odom(dt);
     // Update stamps
     this->pose_.header.stamp = update_time;
     this->velocity_.header.stamp = update_time;
     this->acceleration_.header.stamp = update_time;
+    this->odom_.header.stamp = update_time;
     // Update time
     this->last_update_time_ = update_time;
 }
@@ -510,6 +563,7 @@ void Agent::publish_state() const
     this->pose_pub_->publish(std::move(std::make_unique<Pose>(this->pose_)));
     this->velocity_pub_->publish(std::move(std::make_unique<Twist>(this->velocity_)));
     this->acceleration_pub_->publish(std::move(std::make_unique<Accel>(this->acceleration_)));
+    this->odometry_pub_->publish(std::move(std::make_unique<Odometry>(this->odom_)));
 
     // Broadcast map -> base_link transform
     if (this->publish_tf_)

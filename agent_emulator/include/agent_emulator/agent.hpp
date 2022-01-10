@@ -11,6 +11,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <geometry_msgs/msg/accel_stamped.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 
 #include <agent_emulator/utils.hpp>
 #include <agent_emulator/srv/set_pose.hpp>
@@ -24,6 +25,7 @@ namespace agent_emulator
 using Pose = geometry_msgs::msg::PoseStamped;
 using Twist = geometry_msgs::msg::TwistStamped;
 using Accel = geometry_msgs::msg::AccelStamped;
+using Odometry = nav_msgs::msg::Odometry;
 
 class Agent : public rclcpp::Node
 {
@@ -43,25 +45,29 @@ public:
     Agent(const rclcpp::NodeOptions& options);
     virtual ~Agent();
 
-    // Get current pose 
+    // Get current pose
     inline Pose get_pose() const {return this->pose_;}
+    // Get current odometry
+    inline Odometry get_odom() const {return this->odom_;}
     // Get x, y and yaw values
     inline double x() const {return this->pose_.pose.position.x;}
     inline double y() const {return this->pose_.pose.position.y;}
     inline double yaw() const {return yaw_from_quaternion<double>(this->pose_.pose.orientation);}
-    // Get current velocity 
+    // Get current velocity
     inline Twist velocity() const {return this->velocity_;};
-    // Get current acceleration 
+    // Get current acceleration
     inline Accel acceleration() const {return this->acceleration_;};
-    // Get frame_id 
+    // Get frame_id
     inline std::string frame_id() const {return this->frame_id_;};
 
-    // Set current pose 
+    // Set current pose
     void set_pose(const Pose& pose);
     // Set x, y and yaw values
     void set_x(const double x);
     void set_y(const double y);
     void set_yaw(const double yaw);
+    // Reset odometry values
+    void reset_odom();
     // Set current velocity 
     void set_velocity(const Twist& velocity);
     void set_linear_velocity(const double v_x);
@@ -84,6 +90,7 @@ protected:
     Pose pose_;
     Twist velocity_;
     Accel acceleration_;
+    Odometry odom_;
 
     // Threads
     bool performing_goto_action_ = false;
@@ -94,7 +101,6 @@ protected:
     // Parameters
     Twist goto_velocity_;
     double goto_goal_tolerance_;
-    double initial_x_;
     std::string frame_id_;
     double update_rate_;
     bool publish_tf_;
@@ -110,6 +116,7 @@ protected:
     rclcpp::Publisher<Pose>::SharedPtr pose_pub_;
     rclcpp::Publisher<Twist>::SharedPtr velocity_pub_;
     rclcpp::Publisher<Accel>::SharedPtr acceleration_pub_;
+    rclcpp::Publisher<Odometry>::SharedPtr odometry_pub_;
 
     // Subscribers
     rclcpp::Subscription<Twist>::SharedPtr velocity_sub_;
@@ -163,6 +170,8 @@ protected:
     void update_velocity(const rclcpp::Duration& dt_dur);
     // Update state pose after dt
     void update_pose(const rclcpp::Duration& dt_dur);
+    // Update state odom after dt
+    void update_odom(const rclcpp::Duration& dt_dur);
 };
 
 
