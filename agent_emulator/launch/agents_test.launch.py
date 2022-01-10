@@ -23,8 +23,9 @@ def generate_launch_description():
 
     # Initial poses
     initial_poses = [
-        [4.0, 0.0, 0],
-        # [-4.0, 0.0, 0]
+        [4.0, 0.0, 90.0],
+        [-4.0, 0.0, 90.0],
+        [-0.0, 4.0, 90.0],
     ]
 
     # Load agent nodes
@@ -38,7 +39,8 @@ def generate_launch_description():
         agent_emulator_params = [{
             "initial_pose": pose,
             "update_rate": 50.0,
-            "frame_id": agent_name + "/base_link",
+            "agent_frame_id": agent_name + "/base_link",
+            "odom_frame_id": agent_name + "/odom",
             "goto_velocity_linear": 1.0,
             "goto_velocity_angular": deg_to_rad(90),
             "goto_goal_tolerance": 0.05,
@@ -77,10 +79,21 @@ def generate_launch_description():
             'offset': 2.0,
             'rate': 10.0,
         }]
+        random_velocity_controller_params = [{
+            'velocity_mean': 3.0,
+            'velocity_stddev': 1.0,
+            'rate': 10.0,
+        }]
+        random_acceleration_controller_params = [{
+            'min_velocity': 1.0,
+            'max_velocity': 3.0,
+            'acceleration_stddev': 0.2,
+            'rate': 10.0,
+        }]
         velocity_controller_node = ComposableNode(
-            package='agent_velocity_controller', plugin='agent_velocity_controller::TriangularVelocityController',
-            name='triangular_velocity_controller', namespace='/' + agent_name,
-            parameters=triangular_velocity_controller_params
+            package='agent_velocity_controller', plugin='agent_velocity_controller::RandomAccelerationController',
+            name='velocity_controller', namespace='/' + agent_name,
+            parameters=random_acceleration_controller_params
         )
         # agent_nodes.append(velocity_controller_node)
 
@@ -89,8 +102,8 @@ def generate_launch_description():
         #########################################################################
         velocity_cmd = ['ros2', 'topic', 'pub', '-1',
             '/{}/target_velocity'.format(agent_name),
-            'geometry_msgs/msg/TwistStamped',
-            "{'twist': {'linear': {'x': 4.0 }, 'angular': {'z': 0.5} } }",
+            'geometry_msgs/msg/Twist',
+            "{'linear': {'x': 4.0 }, 'angular': {'z': 0.5} }",
         ]
         ld.add_action(TimerAction(period=5.0, actions=[
             ExecuteProcess(cmd=velocity_cmd, name='{}_velocity_pub'.format(agent_name))
@@ -117,7 +130,7 @@ def generate_launch_description():
                     package='agent_emulator', executable='agent_viz', name='agent_viz',
                     output='screen', parameters=agent_viz_params
                    )
-    # ld.add_action(agent_viz_node)
+    ld.add_action(agent_viz_node)
 
     rviz_config_file = os.path.join(get_package_share_directory('agent_emulator'), 'launch/agents.rviz')
     rviz_node = Node(

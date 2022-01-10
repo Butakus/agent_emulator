@@ -52,17 +52,16 @@ void TriangularVelocityController::run()
     {
         auto now = this->now();
         Twist::UniquePtr velocity = std::make_unique<Twist>();
-        velocity->header.stamp = now;
         double signal_dt = std::fmod(now.seconds(), this->period_);
         if (signal_dt < this->period_ / 2.0)
         {
             // Acceleration
-            velocity->twist.linear.x = this->offset_ + (this->acceleration_ * signal_dt);
+            velocity->linear.x = this->offset_ + (this->acceleration_ * signal_dt);
         }
         else
         {
             // Deceleration
-            velocity->twist.linear.x = this->offset_ + (this->acceleration_ * (this->period_ - signal_dt));
+            velocity->linear.x = this->offset_ + (this->acceleration_ * (this->period_ - signal_dt));
         }
         // Publish the velocity command
         this->velocity_pub_->publish(std::move(velocity));

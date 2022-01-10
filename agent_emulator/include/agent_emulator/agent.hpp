@@ -8,6 +8,7 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/static_transform_broadcaster.h>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <geometry_msgs/msg/accel_stamped.hpp>
@@ -22,9 +23,12 @@
 namespace agent_emulator
 {
 
-using Pose = geometry_msgs::msg::PoseStamped;
-using Twist = geometry_msgs::msg::TwistStamped;
-using Accel = geometry_msgs::msg::AccelStamped;
+using Pose = geometry_msgs::msg::Pose;
+using Twist = geometry_msgs::msg::Twist;
+using Accel = geometry_msgs::msg::Accel;
+using PoseStamped = geometry_msgs::msg::PoseStamped;
+using TwistStamped = geometry_msgs::msg::TwistStamped;
+using AccelStamped = geometry_msgs::msg::AccelStamped;
 using Odometry = nav_msgs::msg::Odometry;
 
 class Agent : public rclcpp::Node
@@ -46,7 +50,7 @@ public:
     virtual ~Agent();
 
     // Get current pose
-    inline Pose get_pose() const {return this->pose_;}
+    inline PoseStamped get_pose() const {return this->pose_;}
     // Get current odometry
     inline Odometry get_odom() const {return this->odom_;}
     // Get x, y and yaw values
@@ -54,11 +58,13 @@ public:
     inline double y() const {return this->pose_.pose.position.y;}
     inline double yaw() const {return yaw_from_quaternion<double>(this->pose_.pose.orientation);}
     // Get current velocity
-    inline Twist velocity() const {return this->velocity_;};
+    inline TwistStamped velocity() const {return this->velocity_;};
     // Get current acceleration
-    inline Accel acceleration() const {return this->acceleration_;};
-    // Get frame_id
-    inline std::string frame_id() const {return this->frame_id_;};
+    inline AccelStamped acceleration() const {return this->acceleration_;};
+    // Get frame ids
+    inline std::string map_frame_id() const {return this->map_frame_id_;};
+    inline std::string odom_frame_id() const {return this->odom_frame_id_;};
+    inline std::string agent_frame_id() const {return this->agent_frame_id_;};
 
     // Set current pose
     void set_pose(const Pose& pose);
@@ -87,10 +93,11 @@ public:
 
 protected:
     // State
-    Pose pose_;
-    Twist velocity_;
-    Accel acceleration_;
+    PoseStamped pose_;
+    TwistStamped velocity_;
+    AccelStamped acceleration_;
     Odometry odom_;
+    Pose initial_pose_;
 
     // Threads
     bool performing_goto_action_ = false;
@@ -101,7 +108,9 @@ protected:
     // Parameters
     Twist goto_velocity_;
     double goto_goal_tolerance_;
-    std::string frame_id_;
+    std::string map_frame_id_;
+    std::string odom_frame_id_;
+    std::string agent_frame_id_;
     double update_rate_;
     bool publish_tf_;
     OnSetParametersCallbackHandle::SharedPtr set_param_callback_handler_;
@@ -113,9 +122,9 @@ protected:
     std::recursive_mutex state_mutex_;
 
     // Publishers
-    rclcpp::Publisher<Pose>::SharedPtr pose_pub_;
-    rclcpp::Publisher<Twist>::SharedPtr velocity_pub_;
-    rclcpp::Publisher<Accel>::SharedPtr acceleration_pub_;
+    rclcpp::Publisher<PoseStamped>::SharedPtr pose_pub_;
+    rclcpp::Publisher<TwistStamped>::SharedPtr velocity_pub_;
+    rclcpp::Publisher<AccelStamped>::SharedPtr acceleration_pub_;
     rclcpp::Publisher<Odometry>::SharedPtr odometry_pub_;
 
     // Subscribers
@@ -132,6 +141,7 @@ protected:
 
     // TF2 broadcaster
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+    std::shared_ptr<tf2_ros::StaticTransformBroadcaster> tf_static_broadcaster_;
 
     // Initialization
     void init();
@@ -147,13 +157,13 @@ protected:
 
     // set_pose service callback
     void set_pose_callback(const std::shared_ptr<SetPose::Request> req,
-                                std::shared_ptr<SetPose::Response> res);
+                                 std::shared_ptr<SetPose::Response> res);
     // set_velocity service callback
     void set_velocity_callback(const std::shared_ptr<SetVelocity::Request> req,
-                                std::shared_ptr<SetVelocity::Response> res);
+                                     std::shared_ptr<SetVelocity::Response> res);
     // set_acceleration service callback
     void set_acceleration_callback(const std::shared_ptr<SetAcceleration::Request> req,
-                                    std::shared_ptr<SetAcceleration::Response> res);
+                                         std::shared_ptr<SetAcceleration::Response> res);
 
     // Action callbacks
     rclcpp_action::GoalResponse handle_goto_goal(const rclcpp_action::GoalUUID& uuid,

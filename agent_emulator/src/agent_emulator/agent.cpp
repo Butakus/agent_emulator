@@ -34,16 +34,18 @@ void Agent::init()
     using std::placeholders::_2;
 
     // Initialize and declare parameters
-    this->goto_velocity_.twist.linear.x = this->declare_parameter("goto_velocity_linear", 1.0);
-    this->goto_velocity_.twist.angular.z = this->declare_parameter("goto_velocity_angular", 0.5);;
+    this->goto_velocity_.linear.x = this->declare_parameter("goto_velocity_linear", 1.0);
+    this->goto_velocity_.angular.z = this->declare_parameter("goto_velocity_angular", 0.5);;
     this->goto_goal_tolerance_ = this->declare_parameter("goto_goal_tolerance", 0.05);
 
     // Descriptor for read_only parameters. These parameters cannot be changed (only overrided from yaml or launch args)
     rcl_interfaces::msg::ParameterDescriptor read_only_descriptor;
     read_only_descriptor.read_only = true;
 
-    // Set frame_id from parameter
-    this->frame_id_ = this->declare_parameter("frame_id", "base_link", read_only_descriptor);
+    // Set frame ids from parameter
+    this->map_frame_id_ = this->declare_parameter("map_frame_id", "map", read_only_descriptor);
+    this->odom_frame_id_ = this->declare_parameter("odom_frame_id", "odom", read_only_descriptor);
+    this->agent_frame_id_ = this->declare_parameter("agent_frame_id", "base_link", read_only_descriptor);
 
     // Set update_rate from parameter
     this->update_rate_ = this->declare_parameter("update_rate", 50.0, read_only_descriptor);
@@ -55,24 +57,24 @@ void Agent::init()
     rclcpp::Time init_time = this->now();
     std::vector<double> initial_pose_param = {0.0, 0.0, 0.0};
     initial_pose_param = this->declare_parameter("initial_pose", initial_pose_param, read_only_descriptor);
-    this->pose_.header.frame_id = "map";
+
+    this->initial_pose_.position.x = initial_pose_param[0];
+    this->initial_pose_.position.y = initial_pose_param[1];
+    this->initial_pose_.orientation = quaternion_msg_from_yaw(deg_to_rad(initial_pose_param[2]));
+
+    this->pose_.header.frame_id = this->map_frame_id_;
     this->pose_.header.stamp = init_time;
-    this->pose_.pose.position.x = initial_pose_param[0];
-    this->pose_.pose.position.y = initial_pose_param[1];
-    this->pose_.pose.orientation = quaternion_msg_from_yaw(deg_to_rad(initial_pose_param[2]));
+    this->pose_.pose = this->initial_pose_;
 
     // Init velocity and acceleration
-    this->velocity_.header.frame_id = this->frame_id_;
+    this->velocity_.header.frame_id = this->agent_frame_id_;
     this->velocity_.header.stamp = init_time;
-    this->acceleration_.header.frame_id = this->frame_id_;
+    this->acceleration_.header.frame_id = this->agent_frame_id_;
     this->acceleration_.header.stamp = init_time;
 
     // Init odometry
-    std::string ns = this->get_effective_namespace();
-    // Use namespace in odom tf frame, removing the starting '/'
-    ns = (ns.size() > 1) ? ns.substr(1, ns.size() - 1) : "";
-    this->odom_.header.frame_id = ns + "odom";
-    this->odom_.child_frame_id = this->frame_id_;
+    this->odom_.header.frame_id = this->odom_frame_id_;
+    this->odom_.child_frame_id = this->agent_frame_id_;
     this->odom_.header.stamp = init_time;
     this->reset_odom();
 
@@ -81,9 +83,9 @@ void Agent::init()
                                                 std::bind(&Agent::set_param_callback, this, _1));
 
     // Publishers
-    this->pose_pub_ = this->create_publisher<Pose>("pose", 5);
-    this->velocity_pub_ = this->create_publisher<Twist>("velocity", 5);
-    this->acceleration_pub_ = this->create_publisher<Accel>("acceleration", 5);
+    this->pose_pub_ = this->create_publisher<PoseStamped>("pose", 5);
+    this->velocity_pub_ = this->create_publisher<TwistStamped>("velocity", 5);
+    this->acceleration_pub_ = this->create_publisher<AccelStamped>("acceleration", 5);
     this->odometry_pub_ = this->create_publisher<Odometry>("odom", 5);
 
     // Subscribers
@@ -111,8 +113,24 @@ void Agent::init()
         std::bind(&Agent::handle_goto_cancel, this, _1),
         std::bind(&Agent::handle_goto_accepted, this, _1));
 
-    // TF broadcaster
-    this->tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+
+    if (this->publish_tf_)
+    {
+        // TF broadcaster
+        this->tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+        this->tf_static_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(this);
+
+        // Publish static tf from map to odom
+        geometry_msgs::msg::TransformStamped map_odom_tf;
+        map_odom_tf.header.stamp = init_time;
+        map_odom_tf.header.frame_id = this->map_frame_id_;
+        map_odom_tf.child_frame_id = this->odom_frame_id_;
+        map_odom_tf.transform.translation.x = this->initial_pose_.position.x;
+        map_odom_tf.transform.translation.y = this->initial_pose_.position.y;
+        map_odom_tf.transform.translation.z = this->initial_pose_.position.z;
+        map_odom_tf.transform.rotation = this->initial_pose_.orientation;
+        this->tf_static_broadcaster_->sendTransform(map_odom_tf);
+    }
 
     // Publish state after initialization (to send initial pose and tf)
     this->last_update_time_ = init_time;
@@ -145,11 +163,11 @@ rcl_interfaces::msg::SetParametersResult Agent::set_param_callback(const std::ve
         RCLCPP_DEBUG_STREAM(this->get_logger(), "Set param " << param.get_name() << ": " << param.value_to_string());
         if (param.get_name() == "goto_velocity_linear")
         {
-            this->goto_velocity_.twist.linear.x = param.as_double();
+            this->goto_velocity_.linear.x = param.as_double();
         }
         else if (param.get_name() == "goto_velocity_angular")
         {
-            this->goto_velocity_.twist.angular.z = param.as_double();
+            this->goto_velocity_.angular.z = param.as_double();
         }
         else if (param.get_name() == "goto_goal_tolerance")
         {
@@ -169,8 +187,7 @@ void Agent::set_pose(const Pose& pose)
     // Lock mutex
     std::lock_guard<std::recursive_mutex> lock(this->state_mutex_);
     // Update state
-    this->pose_.header = pose.header;
-    this->pose_.pose = pose.pose;
+    this->pose_.pose = pose;
     // Reset odometry
     this->reset_odom();
     // Update time
@@ -237,8 +254,7 @@ void Agent::set_velocity(const Twist& velocity)
     // When velocity or acceleration is changed, state must be updated
     this->update_state();
     // Update velocity
-    this->velocity_.header = velocity.header;
-    this->velocity_.twist = velocity.twist;
+    this->velocity_.twist = velocity;
 }
 
 void Agent::set_linear_velocity(const double v_x)
@@ -268,8 +284,7 @@ void Agent::set_acceleration(const Accel& acceleration)
     // When velocity or acceleration is changed, state must be updated
     this->update_state();
     // Update acceleration
-    this->acceleration_.header = acceleration.header;
-    this->acceleration_.accel = acceleration.accel;
+    this->acceleration_.accel = acceleration;
 }
 
 void Agent::set_linear_acceleration(const double a_x)
@@ -294,7 +309,7 @@ void Agent::set_angular_acceleration(const double a_yaw)
 
 void Agent::set_frame_id(const std::string frame_id)
 {
-    this->frame_id_ = frame_id;
+    this->agent_frame_id_ = frame_id;
     this->velocity_.header.frame_id = frame_id;
     this->acceleration_.header.frame_id = frame_id;
     this->odom_.child_frame_id = frame_id;
@@ -304,8 +319,8 @@ void Agent::velocity_callback(const Twist::SharedPtr twist_msg)
 {
     RCLCPP_DEBUG_STREAM(this->get_logger(),
                         "Set velocity (x, yaw) to (" <<
-                        twist_msg->twist.linear.x << ", " <<
-                        twist_msg->twist.angular.z << ")");
+                        twist_msg->linear.x << ", " <<
+                        twist_msg->angular.z << ")");
     this->set_velocity(*twist_msg);
 }
 
@@ -313,13 +328,13 @@ void Agent::acceleration_callback(const Accel::SharedPtr accel_msg)
 {
     RCLCPP_DEBUG_STREAM(this->get_logger(),
                         "Set acceleration (x, yaw) to (" <<
-                        accel_msg->accel.linear.x << ", " << 
-                        accel_msg->accel.angular.z << ")");
+                        accel_msg->linear.x << ", " << 
+                        accel_msg->angular.z << ")");
     this->set_acceleration(*accel_msg);
 }
 
 void Agent::set_pose_callback(const std::shared_ptr<SetPose::Request> req,
-                               std::shared_ptr<SetPose::Response> res)
+                                    std::shared_ptr<SetPose::Response> res)
 {
     // Check if the agent is performing an  action
     if (this->performing_goto_action_)
@@ -332,8 +347,8 @@ void Agent::set_pose_callback(const std::shared_ptr<SetPose::Request> req,
     {
         RCLCPP_DEBUG_STREAM(this->get_logger(),
                             "Set pose (x, y) to (" <<
-                            req->pose.pose.position.x << ", " <<
-                            req->pose.pose.position.y << ")");
+                            req->pose.position.x << ", " <<
+                            req->pose.position.y << ")");
         // Update the pose
         this->set_pose(req->pose);
         res->success = true;
@@ -341,36 +356,36 @@ void Agent::set_pose_callback(const std::shared_ptr<SetPose::Request> req,
 }
 
 void Agent::set_velocity_callback(const std::shared_ptr<SetVelocity::Request> req,
-                                   std::shared_ptr<SetVelocity::Response> res)
+                                        std::shared_ptr<SetVelocity::Response> res)
 {
     RCLCPP_DEBUG_STREAM(this->get_logger(),
                         "Set velocity (x, yaw) to (" <<
-                        req->velocity.twist.linear.x << ", " <<
-                        req->velocity.twist.angular.z << ")");
+                        req->velocity.linear.x << ", " <<
+                        req->velocity.angular.z << ")");
     // Update the velocity
     this->set_velocity(req->velocity);
     res->success = true;
 }
 
 void Agent::set_acceleration_callback(const std::shared_ptr<SetAcceleration::Request> req,
-                                       std::shared_ptr<SetAcceleration::Response> res)
+                                            std::shared_ptr<SetAcceleration::Response> res)
 {
     RCLCPP_DEBUG_STREAM(this->get_logger(),
                         "Set acceleration (x, yaw) to (" <<
-                        req->acceleration.accel.linear.x << ", " <<
-                        req->acceleration.accel.angular.z << ")");
+                        req->acceleration.linear.x << ", " <<
+                        req->acceleration.angular.z << ")");
     // Update the acceleration
     this->set_acceleration(req->acceleration);
     res->success = true;
 }
 
 rclcpp_action::GoalResponse Agent::handle_goto_goal(const rclcpp_action::GoalUUID& uuid,
-                                                     std::shared_ptr<const GoTo::Goal> goal)
+                                                    std::shared_ptr<const GoTo::Goal> goal)
 {
     RCLCPP_DEBUG_STREAM(this->get_logger(),
                         "Received GoTo goal request " << (int)uuid[0] << " - (" <<
-                        goal->goal_pose.pose.position.x << ", " << 
-                        goal->goal_pose.pose.position.y << ")");
+                        goal->goal_pose.position.x << ", " << 
+                        goal->goal_pose.position.y << ")");
     // Check if agent is already performing an action
     if (this->performing_goto_action_)
     {
@@ -426,8 +441,8 @@ void Agent::execute_goto(const std::shared_ptr<GoalHandleGoTo> goal_handle)
         this->update_state();
 
         // Check goal
-        double trans_error = std::hypot(goal->goal_pose.pose.position.x - this->pose_.pose.position.x,
-                                        goal->goal_pose.pose.position.y - this->pose_.pose.position.y);
+        double trans_error = std::hypot(goal->goal_pose.position.x - this->pose_.pose.position.x,
+                                        goal->goal_pose.position.y - this->pose_.pose.position.y);
         if (trans_error < goto_goal_tolerance_)
         {
             // Set zero velocity to stop any movement
@@ -446,7 +461,7 @@ void Agent::execute_goto(const std::shared_ptr<GoalHandleGoTo> goal_handle)
 
         // Publish feedback
         feedback->current_pose = this->pose_;
-        feedback->cmd_vel = goal_velocity;
+        feedback->cmd_vel = this->velocity_;
         goal_handle->publish_feedback(feedback);
 
         rate.sleep();
@@ -457,12 +472,11 @@ void Agent::execute_goto(const std::shared_ptr<GoalHandleGoTo> goal_handle)
 Twist Agent::compute_velocity_cmd(const std::shared_ptr<GoalHandleGoTo> goal_handle) const
 {
     Twist velocity_cmd;
-    velocity_cmd.header = this->velocity_.header;
 
     Pose goal_pose = goal_handle->get_goal()->goal_pose;
 
-    double d_x = goal_pose.pose.position.x - this->pose_.pose.position.x;
-    double d_y = goal_pose.pose.position.y - this->pose_.pose.position.y;
+    double d_x = goal_pose.position.x - this->pose_.pose.position.x;
+    double d_y = goal_pose.position.y - this->pose_.pose.position.y;
 
     double current_yaw = std::fmod(yaw_from_quaternion<double>(this->pose_.pose.orientation), deg_to_rad(360));
     current_yaw = norm_angle(current_yaw);
@@ -480,10 +494,10 @@ Twist Agent::compute_velocity_cmd(const std::shared_ptr<GoalHandleGoTo> goal_han
     double trans_error = std::hypot(d_x, d_y);
 
     // If rotation error is too high, do only rotation
-    velocity_cmd.twist.linear.x = std::abs(yaw_error) > deg_to_rad(20) ? 0.0 :
-                                this->goto_velocity_.twist.linear.x * smooth(trans_error, 0.3);
+    velocity_cmd.linear.x = std::abs(yaw_error) > deg_to_rad(20) ? 0.0 :
+                                this->goto_velocity_.linear.x * smooth(trans_error, 0.3);
 
-    velocity_cmd.twist.angular.z = this->goto_velocity_.twist.angular.z * smooth(yaw_error, 0.2);
+    velocity_cmd.angular.z = this->goto_velocity_.angular.z * smooth(yaw_error, 0.2);
 
     return velocity_cmd;
 }
@@ -491,7 +505,6 @@ Twist Agent::compute_velocity_cmd(const std::shared_ptr<GoalHandleGoTo> goal_han
 void Agent::set_zero_velocity()
 {
     Twist zero_vel;
-    zero_vel.header.frame_id = this->velocity_.header.frame_id;
     this->set_velocity(zero_vel);
 }
 
@@ -560,23 +573,23 @@ void Agent::update_state()
 void Agent::publish_state() const
 {
     // Publish state
-    this->pose_pub_->publish(std::move(std::make_unique<Pose>(this->pose_)));
-    this->velocity_pub_->publish(std::move(std::make_unique<Twist>(this->velocity_)));
-    this->acceleration_pub_->publish(std::move(std::make_unique<Accel>(this->acceleration_)));
+    this->pose_pub_->publish(std::move(std::make_unique<PoseStamped>(this->pose_)));
+    this->velocity_pub_->publish(std::move(std::make_unique<TwistStamped>(this->velocity_)));
+    this->acceleration_pub_->publish(std::move(std::make_unique<AccelStamped>(this->acceleration_)));
     this->odometry_pub_->publish(std::move(std::make_unique<Odometry>(this->odom_)));
 
-    // Broadcast map -> base_link transform
+    // Broadcast map -> odom -> base_link transforms
     if (this->publish_tf_)
     {
-        geometry_msgs::msg::TransformStamped tf;
-        tf.header.stamp = this->pose_.header.stamp;
-        tf.header.frame_id = this->pose_.header.frame_id;
-        tf.child_frame_id = this->frame_id_;
-        tf.transform.translation.x = this->pose_.pose.position.x;
-        tf.transform.translation.y = this->pose_.pose.position.y;
-        tf.transform.translation.z = this->pose_.pose.position.z;
-        tf.transform.rotation = this->pose_.pose.orientation;
-        this->tf_broadcaster_->sendTransform(tf);
+        geometry_msgs::msg::TransformStamped odom_agent_tf;
+        odom_agent_tf.header.stamp = this->odom_.header.stamp;
+        odom_agent_tf.header.frame_id = this->odom_frame_id_;
+        odom_agent_tf.child_frame_id = this->agent_frame_id_;
+        odom_agent_tf.transform.translation.x = this->odom_.pose.pose.position.x;
+        odom_agent_tf.transform.translation.y = this->odom_.pose.pose.position.y;
+        odom_agent_tf.transform.translation.z = this->odom_.pose.pose.position.z;
+        odom_agent_tf.transform.rotation = this->odom_.pose.pose.orientation;
+        this->tf_broadcaster_->sendTransform(odom_agent_tf);
     }
 }
 

@@ -1,7 +1,7 @@
 # Request
 
 # Target pose
-geometry_msgs/PoseStamped pose
+geometry_msgs/Pose pose
 
 ---
 # Response

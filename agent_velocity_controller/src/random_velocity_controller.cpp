@@ -59,8 +59,7 @@ void RandomVelocityController::run()
     {
     	// Compute a new random velocity
         Twist::UniquePtr velocity = std::make_unique<Twist>();
-        velocity->header.stamp = this->now();
-        velocity->twist.linear.x = this->velocity_gauss_distribution_(this->random_generator_);
+        velocity->linear.x = this->velocity_gauss_distribution_(this->random_generator_);
         // Publish the velocity command
         this->velocity_pub_->publish(std::move(velocity));
         rate.sleep();

@@ -5,8 +5,8 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
-#include <geometry_msgs/msg/twist_stamped.hpp>
-#include <geometry_msgs/msg/accel_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/accel.hpp>
 
 
 namespace agent_velocity_controller
@@ -15,7 +15,7 @@ namespace agent_velocity_controller
 class RandomVelocityController : public rclcpp::Node
 {
 public:
-    using Twist = geometry_msgs::msg::TwistStamped;
+    using Twist = geometry_msgs::msg::Twist;
 
     // Smartpointer typedef
     typedef std::shared_ptr<RandomVelocityController> SharedPtr;

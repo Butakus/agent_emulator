@@ -1,7 +1,7 @@
 # Request
 
 # Target velocity
-geometry_msgs/TwistStamped velocity
+geometry_msgs/Twist velocity
 
 ---
 # Response

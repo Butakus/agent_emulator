@@ -50,7 +50,7 @@ void RandomAccelerationController::init()
     this->acceleration_pub_ = this->create_publisher<Accel>("target_acceleration", 5);
     // Subscriber
     using std::placeholders::_1;
-    this->velocity_sub_ = this->create_subscription<Twist>(
+    this->velocity_sub_ = this->create_subscription<TwistStamped>(
         "velocity", rclcpp::SensorDataQoS(),
         std::bind(&RandomAccelerationController::velocity_callback, this, _1));
 
@@ -76,8 +76,7 @@ void RandomAccelerationController::run()
         // compute new acceleration
         double acceleration = this->compute_acceleration();
         Accel::UniquePtr a = std::make_unique<Accel>();
-        a->header.stamp = now;
-        a->accel.linear.x = acceleration;
+        a->linear.x = acceleration;
         this->acceleration_pub_->publish(std::move(a));
         rate.sleep();
     }
@@ -102,7 +101,7 @@ double RandomAccelerationController::compute_acceleration()
     return acceleration;
 }
 
-void RandomAccelerationController::velocity_callback(const Twist::SharedPtr twist_msg)
+void RandomAccelerationController::velocity_callback(const TwistStamped::SharedPtr twist_msg)
 {
     // Lock mutex
     std::lock_guard<std::mutex> lock(this->state_mutex_);

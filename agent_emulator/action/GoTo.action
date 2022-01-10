@@ -1,7 +1,7 @@
 # Goal
 
 # Target pose
-geometry_msgs/PoseStamped goal_pose
+geometry_msgs/Pose goal_pose
 
 ---
 # Result

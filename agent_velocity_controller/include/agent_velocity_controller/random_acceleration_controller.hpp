@@ -7,7 +7,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
-#include <geometry_msgs/msg/accel_stamped.hpp>
+#include <geometry_msgs/msg/accel.hpp>
 
 
 namespace agent_velocity_controller
@@ -16,8 +16,8 @@ namespace agent_velocity_controller
 class RandomAccelerationController : public rclcpp::Node
 {
 public:
-    using Twist = geometry_msgs::msg::TwistStamped;
-    using Accel = geometry_msgs::msg::AccelStamped;
+    using Accel = geometry_msgs::msg::Accel;
+    using TwistStamped = geometry_msgs::msg::TwistStamped;
 
     // Smartpointer typedef
     typedef std::shared_ptr<RandomAccelerationController> SharedPtr;
@@ -34,7 +34,7 @@ protected:
     double max_velocity_threshold_;
 
     // State
-    Twist::SharedPtr velocity_;
+    TwistStamped::SharedPtr velocity_;
 
     // Threads
     bool running_ = false;
@@ -51,7 +51,7 @@ protected:
     rclcpp::Publisher<Accel>::SharedPtr acceleration_pub_;
 
     // Subscriber
-    rclcpp::Subscription<Twist>::SharedPtr velocity_sub_;
+    rclcpp::Subscription<TwistStamped>::SharedPtr velocity_sub_;
 
     void init();
     void run();
@@ -60,7 +60,7 @@ protected:
     double compute_acceleration();
 
     // Callback
-    void velocity_callback(const Twist::SharedPtr twist_msg);
+    void velocity_callback(const TwistStamped::SharedPtr twist_msg);
 };
 
 }  // namespace agent_velocity_controller

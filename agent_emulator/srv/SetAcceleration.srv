@@ -1,7 +1,7 @@
 # Request
 
 # Target acceleration
-geometry_msgs/AccelStamped acceleration
+geometry_msgs/Accel acceleration
 
 ---
 # Response
