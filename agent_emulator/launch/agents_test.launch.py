@@ -23,9 +23,9 @@ def generate_launch_description():
 
     # Initial poses
     initial_poses = [
-        [4.0, 0.0, 90.0],
-        [-4.0, 0.0, 90.0],
-        [-0.0, 4.0, 90.0],
+        [4.0, 0.0, 0.0],
+        [-4.0, 0.0, 0.0],
+        [-0.0, 4.0, 0.0],
     ]
 
     # Load agent nodes
@@ -56,9 +56,9 @@ def generate_launch_description():
         #########################################################################
         # Parameters
         noisy_localization_params = [{
-            "position_stddev": 2.0,
+            "position_stddev": 0.5,
             "orientation_stddev": deg_to_rad(0.5),
-            "velocity_linear_stddev": 1.0,
+            "velocity_linear_stddev": 0.2,
             "velocity_angular_stddev": deg_to_rad(0.2),
             "rate": 20.0,
         }]
@@ -67,7 +67,25 @@ def generate_launch_description():
             name='noisy_localization', namespace="/" + agent_name,
             parameters=noisy_localization_params
         )
-        # agent_nodes.append(noisy_localization_node)
+        agent_nodes.append(noisy_localization_node)
+
+        #########################################################################
+        # Noisy Odometry
+        #########################################################################
+        # Parameters
+        noisy_odometry_params = [{
+            "position_drift_noise": 0.01,
+            "position_drift_vel_rate": 0.02,
+            "orientation_drift_noise": 0.02,
+            "orientation_drift_vel_rate": 0.01,
+            "rate": 20.0,
+        }]
+        noisy_odometry_node = ComposableNode(
+            package='noisy_localization', plugin='noisy_localization::NoisyOdometry',
+            name='noisy_odometry', namespace="/" + agent_name,
+            parameters=noisy_odometry_params
+        )
+        agent_nodes.append(noisy_odometry_node)
 
         #########################################################################
         # Velocity controller

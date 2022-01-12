@@ -35,7 +35,11 @@ void NoisyLocalization::init()
     this->orientation_stddev_ = this->declare_parameter("orientation_stddev", deg_to_rad(0.5));
     this->velocity_linear_stddev_ = this->declare_parameter("velocity_linear_stddev", 1.0);
     this->velocity_angular_stddev_ = this->declare_parameter("velocity_angular_stddev", deg_to_rad(0.1));
-    this->rate_ = this->declare_parameter("rate", 20.0);
+    // Descriptor for read_only parameters. These parameters cannot be changed (only overrided from yaml or launch args)
+    rcl_interfaces::msg::ParameterDescriptor read_only_descriptor;
+    read_only_descriptor.read_only = true;
+
+    this->rate_ = this->declare_parameter("rate", 20.0, read_only_descriptor);
 
     // Initialize gaussian random distributions
     this->position_gauss_distribution_ = std::normal_distribution<>(0.0, this->position_stddev_);

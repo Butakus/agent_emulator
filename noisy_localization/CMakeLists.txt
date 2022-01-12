@@ -25,6 +25,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 # Add noisy_localization node library
 add_library(noisy_localization_node SHARED
@@ -39,9 +40,33 @@ ament_target_dependencies(noisy_localization_node
   geometry_msgs
   nav_msgs
 )
+target_link_libraries(noisy_localization_node
+  Eigen3::Eigen
+)
 rclcpp_components_register_node(noisy_localization_node
   PLUGIN "noisy_localization::NoisyLocalization"
   EXECUTABLE noisy_localization
+)
+
+# Add noisy_odometry node library
+add_library(noisy_odometry_node SHARED
+  src/noisy_odometry.cpp
+)
+target_include_directories(noisy_odometry_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+ament_target_dependencies(noisy_odometry_node
+  rclcpp
+  rclcpp_components
+  geometry_msgs
+  nav_msgs
+)
+target_link_libraries(noisy_odometry_node
+  Eigen3::Eigen
+)
+rclcpp_components_register_node(noisy_odometry_node
+  PLUGIN "noisy_localization::NoisyOdometry"
+  EXECUTABLE noisy_odometry
 )
 
 # Add noisy_platoon_localization node library
@@ -105,6 +130,7 @@ rclcpp_components_register_node(platoon_noise_variator_node
 # Install node libraries
 install(TARGETS
   noisy_localization_node
+  noisy_odometry_node
   noisy_platoon_localization_node
   noisy_platoon_odometry_node
   platoon_noise_variator_node
@@ -142,6 +168,7 @@ endif()
 
 ament_export_libraries(
   noisy_localization_node
+  noisy_odometry_node
   noisy_platoon_localization_node
   noisy_platoon_odometry_node
   platoon_noise_variator_node

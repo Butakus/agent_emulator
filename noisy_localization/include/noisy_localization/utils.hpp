@@ -5,6 +5,7 @@
 
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <tf2/LinearMath/Quaternion.h>
+#include <tf2/convert.h>
 // Remove "-Wpedantic with tf2/utils.h to avoid warnings about extra ';'"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
@@ -58,6 +59,35 @@ T norm_angle(const T& angle)
     return angle < 0 ? angle + deg_to_rad(360) : angle;
 }
 
+geometry_msgs::msg::Pose relative_transform(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2)
+{
+    tf2::Transform p1_tf;
+    tf2::fromMsg(p1, p1_tf);
+    tf2::Transform p2_tf;
+    tf2::fromMsg(p2, p2_tf);
+
+    tf2::Transform transform_tf = p1_tf.inverseTimes(p2_tf);
+
+    geometry_msgs::msg::Pose transform_pose;
+    tf2::toMsg(transform_tf, transform_pose);
+
+    return transform_pose;
+}
+
+geometry_msgs::msg::Pose composed_pose(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2)
+{
+    tf2::Transform p1_tf;
+    tf2::fromMsg(p1, p1_tf);
+    tf2::Transform p2_tf;
+    tf2::fromMsg(p2, p2_tf);
+
+    tf2::Transform composed_tf = p1_tf * p2_tf;
+
+    geometry_msgs::msg::Pose composed_pose;
+    tf2::toMsg(composed_tf, composed_pose);
+
+    return composed_pose;
+}
 
 } // Namespace noisy_localization
 
