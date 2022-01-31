@@ -37,6 +37,7 @@ protected:
     double velocity_linear_stddev_;
     double velocity_angular_stddev_;
     double rate_;
+    OnSetParametersCallbackHandle::SharedPtr set_param_callback_handler_;
 
     // State
     Pose::SharedPtr current_pose_;
@@ -63,6 +64,9 @@ protected:
 
     void init();
     void run();
+
+    // Param callback
+    rcl_interfaces::msg::SetParametersResult set_param_callback(const std::vector<rclcpp::Parameter>& params);
 
     // Callbacks
     void pose_callback(const Pose::SharedPtr pose_msg);

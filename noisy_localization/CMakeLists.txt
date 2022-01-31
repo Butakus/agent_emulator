@@ -69,6 +69,24 @@ rclcpp_components_register_node(noisy_odometry_node
   EXECUTABLE noisy_odometry
 )
 
+# Add noise_variator node library
+add_library(noise_variator_node SHARED
+  src/noise_variator.cpp
+)
+target_include_directories(noise_variator_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+ament_target_dependencies(noise_variator_node
+  rclcpp
+  rclcpp_components
+  geometry_msgs
+)
+rclcpp_components_register_node(noise_variator_node
+  PLUGIN "noisy_localization::NoiseVariator"
+  EXECUTABLE noise_variator
+)
+
+
 # Add noisy_platoon_localization node library
 add_library(noisy_platoon_localization_node SHARED
   src/noisy_platoon_localization.cpp
@@ -131,6 +149,7 @@ rclcpp_components_register_node(platoon_noise_variator_node
 install(TARGETS
   noisy_localization_node
   noisy_odometry_node
+  noise_variator_node
   noisy_platoon_localization_node
   noisy_platoon_odometry_node
   platoon_noise_variator_node
@@ -143,6 +162,8 @@ install(TARGETS
 # Install node executables
 install(TARGETS
   noisy_localization
+  noisy_odometry
+  noise_variator
   noisy_platoon_localization
   noisy_platoon_odometry
   platoon_noise_variator
@@ -169,6 +190,7 @@ endif()
 ament_export_libraries(
   noisy_localization_node
   noisy_odometry_node
+  noise_variator_node
   noisy_platoon_localization_node
   noisy_platoon_odometry_node
   platoon_noise_variator_node

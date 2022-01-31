@@ -30,6 +30,7 @@ NoisyLocalization::~NoisyLocalization()
 
 void NoisyLocalization::init()
 {
+    using std::placeholders::_1;
     // Initialize and declare parameters
     this->position_stddev_ = this->declare_parameter("position_stddev", 2.0);
     this->orientation_stddev_ = this->declare_parameter("orientation_stddev", deg_to_rad(0.5));
@@ -47,9 +48,12 @@ void NoisyLocalization::init()
     this->velocity_linear_gauss_distribution_ = std::normal_distribution<>(0.0, this->velocity_linear_stddev_);
     this->velocity_angular_gauss_distribution_ = std::normal_distribution<>(0.0, this->velocity_angular_stddev_);
 
+    // Set callback to handle parameter setting
+    this->set_param_callback_handler_ = this->add_on_set_parameters_callback(
+                                                std::bind(&NoisyLocalization::set_param_callback, this, _1));
+
     // Publisher / Subscribers
     this->odom_pub_ = this->create_publisher<Odometry>("prior_pose_estimation", rclcpp::SensorDataQoS());
-    using std::placeholders::_1;
     this->pose_sub_ = this->create_subscription<Pose>(
         "pose", rclcpp::SensorDataQoS(),
         std::bind(&NoisyLocalization::pose_callback, this, _1));
@@ -67,23 +71,25 @@ void NoisyLocalization::run()
     std::unique_lock<std::mutex> state_lock(this->state_mutex_, std::defer_lock);
 
     rclcpp::Rate rate(this->rate_);
-    // TODO: Wait until pose is received
+    // Wait until pose is received
+    while (rclcpp::ok() && this->running_ && this->current_pose_ == nullptr)
+    {
+        rate.sleep();
+    }
     while (rclcpp::ok() && this->running_)
     {
         Odometry::UniquePtr odom_msg = std::make_unique<Odometry>();
         // Lock mutex while accessing current_pose_ and current_velocity_
         state_lock.lock();
-        if (this->current_pose_ != nullptr)
+
+        // Set header and pose from input pose
+        odom_msg->header = this->current_pose_->header;
+        odom_msg->pose.pose = this->current_pose_->pose;
+        if (this->current_velocity_ != nullptr)
         {
-            // Set header and pose from input pose
-            odom_msg->header = this->current_pose_->header;
-            odom_msg->pose.pose = this->current_pose_->pose;
-            if (this->current_velocity_ != nullptr)
-            {
-                // Set velocity and child_frame_id from input velocity
-                odom_msg->child_frame_id = this->current_velocity_->header.frame_id;
-                odom_msg->twist.twist = this->current_velocity_->twist;
-            }
+            // Set velocity and child_frame_id from input velocity
+            odom_msg->child_frame_id = this->current_velocity_->header.frame_id;
+            odom_msg->twist.twist = this->current_velocity_->twist;
         }
         state_lock.unlock();
 
@@ -109,6 +115,44 @@ void NoisyLocalization::run()
 
         rate.sleep();
     }
+}
+
+rcl_interfaces::msg::SetParametersResult NoisyLocalization::set_param_callback(const std::vector<rclcpp::Parameter>& params)
+{
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = true;
+
+    for (const auto & param : params)
+    {
+        RCLCPP_DEBUG_STREAM(this->get_logger(), "Set param " << param.get_name() << ": " << param.value_to_string());
+        if (param.get_name() == "position_stddev")
+        {
+            std::lock_guard<std::mutex> lock(this->state_mutex_);
+            this->position_stddev_ = param.as_double();
+            this->position_gauss_distribution_ = std::normal_distribution<>(0.0, this->position_stddev_);
+        }
+        else if (param.get_name() == "orientation_stddev")
+        {
+            std::lock_guard<std::mutex> lock(this->state_mutex_);
+            this->orientation_stddev_ = param.as_double();
+            this->orientation_gauss_distribution_ = std::normal_distribution<>(0.0, this->orientation_stddev_);
+        }
+        else if (param.get_name() == "velocity_linear_stddev")
+        {
+            std::lock_guard<std::mutex> lock(this->state_mutex_);
+            this->velocity_linear_stddev_ = param.as_double();
+        }
+        else if (param.get_name() == "velocity_angular_stddev")
+        {
+            std::lock_guard<std::mutex> lock(this->state_mutex_);
+            this->velocity_angular_stddev_ = param.as_double();
+        }
+        else
+        {
+            RCLCPP_WARN_STREAM(this->get_logger(), "Unknown param \"" << param.get_name() << "\". Skipping.");
+        }
+    }
+    return result;
 }
 
 void NoisyLocalization::pose_callback(const Pose::SharedPtr pose_msg)
