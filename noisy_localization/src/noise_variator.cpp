@@ -119,10 +119,7 @@ void NoiseVariator::run()
                 // Update noise parameter with a new random stddev
                 state_lock.lock();
                 double base_position_noise = this->initial_position_stddev_;
-                if (this->current_pose_->pose.position.x > this->tunnel_start_x_ &&
-                    this->current_pose_->pose.position.x < this->tunnel_end_x_ &&
-                    this->current_pose_->pose.position.y > this->tunnel_start_y_ &&
-                    this->current_pose_->pose.position.y < this->tunnel_end_y_ )
+                if (this->tunnel_active_)
                 {
                     // If inside the tunnel, use the tunnel stddev as noise mean
                     base_position_noise = this->tunnel_mean_stddev_;
@@ -184,6 +181,16 @@ void NoiseVariator::set_noise_param(std::string param_name, double stddev_param)
     this->parameters_client_->set_parameters(params, param_callback);
 }
 
+bool NoiseVariator::check_tunnel()
+{
+    return (
+        this->current_pose_->pose.position.x > this->tunnel_start_x_ &&
+        this->current_pose_->pose.position.x < this->tunnel_end_x_ &&
+        this->current_pose_->pose.position.y > this->tunnel_start_y_ &&
+        this->current_pose_->pose.position.y < this->tunnel_end_y_
+    );
+}
+
 void NoiseVariator::pose_callback(const Pose::SharedPtr pose_msg)
 {
     // Lock mutex
@@ -194,17 +201,16 @@ void NoiseVariator::pose_callback(const Pose::SharedPtr pose_msg)
         this->current_pose_ = pose_msg;
         return;
     }
-    
-    /// TODO
-    // Check tunnel event
-    // if ((this->current_pose_->pose.position.x < this->tunnel_start_ && pose_msg->pose.position.x > this->tunnel_start_) ||
-    //     (this->current_pose_->pose.position.x < this->tunnel_end_ && pose_msg->pose.position.x > this->tunnel_end_)     ||
-    //     (this->current_pose_->pose.position.x > this->tunnel_start_ && pose_msg->pose.position.x < this->tunnel_start_) ||
-    //     (this->current_pose_->pose.position.x > this->tunnel_end_ && pose_msg->pose.position.x < this->tunnel_end_))
-    // {
-    //     this->force_tunnel_update_ = true;
-    // }
+    // Update pose
     this->current_pose_ = pose_msg;
+    // Check tunnel event
+    bool inside_tunnel = this->check_tunnel();
+
+    if (this->tunnel_active_ != inside_tunnel)
+    {
+        this->force_tunnel_update_ = true;
+        this->tunnel_active_ = inside_tunnel;
+    }
 }
 
 }  // namespace noisy_localization

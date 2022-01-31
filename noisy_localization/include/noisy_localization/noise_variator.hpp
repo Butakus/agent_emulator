@@ -45,6 +45,7 @@ protected:
     double initial_position_stddev_;
     double initial_orientation_stddev_;
     bool force_tunnel_update_;
+    bool tunnel_active_;
     std::mutex state_mutex_;
 
     // Threads
@@ -66,6 +67,9 @@ protected:
 
     void init();
     void run();
+
+    // Check if the vehicle is inside the tunnel
+    bool check_tunnel();
 
     // Get/Set the value stored in the noise parameter
     void get_noise_param(std::string param_name, double& param);
