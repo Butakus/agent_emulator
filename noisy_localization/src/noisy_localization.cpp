@@ -53,7 +53,7 @@ void NoisyLocalization::init()
                                                 std::bind(&NoisyLocalization::set_param_callback, this, _1));
 
     // Publisher / Subscribers
-    this->odom_pub_ = this->create_publisher<Odometry>("prior_pose_estimation", rclcpp::SensorDataQoS());
+    this->odom_pub_ = this->create_publisher<Odometry>("prior_estimation", rclcpp::SensorDataQoS());
     this->pose_sub_ = this->create_subscription<Pose>(
         "pose", rclcpp::SensorDataQoS(),
         std::bind(&NoisyLocalization::pose_callback, this, _1));

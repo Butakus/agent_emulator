@@ -59,7 +59,8 @@ void NoisyOdometry::run()
 
     rclcpp::Rate rate(this->rate_);
     // Wait until 2 odometries are received
-    while (rclcpp::ok() && this->running_ && this->last_odom_ == nullptr && this->current_odom_ == nullptr)
+    while (rclcpp::ok() && this->running_ &&
+          (this->last_odom_ == nullptr || this->current_odom_ == nullptr))
     {
         rate.sleep();
     }
